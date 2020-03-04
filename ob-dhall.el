@@ -57,30 +57,53 @@
 This function is called by `org-babel-execute-src-block'."
   (let* ((result-params (cdr (assoc :result-params params)))
          (result-type   (cdr (assoc :result-type params)))
-         (k8s-cmd   (cdr (assoc :kubectl params)))
+         (k8s-cmd       (cdr (assoc :kubectl params)))
+         (digest-cmd    (cdr (assoc :digest params)))
+         (format-cmd    (cdr (assoc :to params)))
          (src-file (org-babel-temp-file "dhall-"))
          (k8s-file (org-babel-temp-file "dhall-k8s-"))
          (result
 	  (progn
+	    (pp digest-cmd)
 	    (with-temp-file src-file (insert body))
 
-	    (if (> (length k8s-cmd) 0)
-		(progn
-		  (with-temp-file k8s-file
-		    (insert (org-babel-eval
-			     (concat "dhall-to-yaml" " --file " src-file)
-			     "")
-			    ))
-		  (org-babel-eval
-		   (concat "kubectl " k8s-cmd " -f " k8s-file)
-		   ""
+	    (cond ((equal digest-cmd "true")
+		   (org-babel-eval
+		    (concat "dhall hash --file " src-file)
+		    ""
+		    ))
+
+		  ((> (length k8s-cmd) 0)
+		   (if (> (length format-cmd) 0)
+		       (progn
+		    	 (with-temp-file k8s-file
+		    	   (insert (org-babel-eval
+		    	  	    (concat "dhall-to-yaml" " --file " src-file)
+		    	  	    "")
+		    	  	   ))
+		    	 (org-babel-eval
+		    	  (concat "kubectl " k8s-cmd " -f " k8s-file " -o " format-cmd)
+		    	  ""
+		    	  ))
+		     ;; else 
+		     (progn
+		       (with-temp-file k8s-file
+		       	 (insert (org-babel-eval
+		       		  (concat "dhall-to-yaml" " --file " src-file)
+		       		  "")
+		       		 ))
+		       (org-babel-eval
+		       	(concat "kubectl " k8s-cmd " -f " k8s-file)
+		       	""
+		       	))))
+		  ;; convert to YAML by default
+		  (t
+		   (org-babel-eval
+		    (concat "dhall-to-yaml" " --file " src-file)
+		    "")
 		   )
-		  )
-		(org-babel-eval
-		 (concat "dhall-to-yaml" " --file " src-file)
-		 "")
-	      )
-	    )))
+		  ))
+	    ))
 
     (org-babel-reassemble-table
      (org-babel-result-cond result-params
